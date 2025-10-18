@@ -1,14 +1,14 @@
-from src.data.generate_data import generate_iris_dataframe
-from src.models.train import train_model, save_model, load_model
+from src.data.loader import load_iris_dataframe
+from src.models.trainer import train, save, load
 from pathlib import Path
 
 
 def test_model_save_and_load(tmp_path):
-    df = generate_iris_dataframe()
-    model, acc, X_test, y_test = train_model(df)
+    df = load_iris_dataframe()
+    model, acc, X_test, y_test = train(df)
     path = tmp_path / "model.joblib"
-    save_model(model, path)
-    loaded = load_model(path)
+    save(model, path)
+    loaded = load(path)
     assert loaded is not None
     preds = loaded.predict(X_test)
     assert len(preds) == len(y_test)

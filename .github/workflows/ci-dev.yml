@@ -7,7 +7,7 @@ on:
     branches: [ dev ]
 
 jobs:
-  test:
+  test_model:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,7 +38,14 @@ jobs:
 
       - name: Build artifacts (train & save model)
         run: |
-          python -m src.main
+          python - <<'PY'
+          from src.data.loader import load_iris_dataframe
+          from src.models.trainer import train, save
+          df = load_iris_dataframe()
+          model, acc, X_test, y_test = train(df)
+          save(model, 'artifacts/rf_model.joblib')
+          print(f"Saved artifacts/rf_model.joblib acc={acc:.3f}")
+          PY
 
       - name: Upload trained model artifact
         uses: actions/upload-artifact@v4
@@ -48,7 +55,7 @@ jobs:
 
       - name: Create markdown report
         run: |
-          PY_RUNNER_NAME="${{ runner.os }} / Python ${{ matrix.python-version || '3.10' }}"
+          PY_RUNNER_NAME="${{ runner.os }} / Python 3.10"
           echo "# CI Report (dev)" > report.md
           echo "- Repository: ${{ github.repository }}" >> report.md
           echo "- Commit: ${{ github.sha }}" >> report.md
