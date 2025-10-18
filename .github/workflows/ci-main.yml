@@ -1,0 +1,76 @@
+name: CI (main)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest with coverage
+        run: |
+          mkdir -p reports
+          pytest -q --cov=src --cov-report=term-missing | tee reports/pytest_output.txt || true
+
+      - name: Build artifacts (train & save model)
+        run: |
+          python -m src.main
+
+      - name: Upload trained model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: artifacts/
+
+      - name: Create markdown report
+        run: |
+          PY_RUNNER_NAME="${{ runner.os }} / Python ${{ matrix.python-version || '3.10' }}"
+          echo "# CI Report (main)" > report.md
+          echo "- Repository: ${{ github.repository }}" >> report.md
+          echo "- Commit: ${{ github.sha }}" >> report.md
+          echo "- Ref: ${{ github.ref }}" >> report.md
+          echo "- Workflow: ${{ github.workflow }}" >> report.md
+          echo "- Run: ${{ github.run_id }}" >> report.md
+          echo "\n## Pytest output\n" >> report.md
+          echo '```' >> report.md
+          sed -n '1,400p' reports/pytest_output.txt >> report.md || true
+          echo '```' >> report.md
+
+      - name: Try post report with CML (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          pip install cml --no-cache-dir
+          cml comment --md report.md --repo "${{ github.repository }}" --sha "${{ github.sha }}" --token "${{ secrets.GITHUB_TOKEN }}" || echo "CML comment failed"
+
+      - name: "Fallback: post report as PR comment"
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body-file: report.md
